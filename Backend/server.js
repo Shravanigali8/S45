@@ -12,8 +12,8 @@ app.use(corsLib());
 // const dbConnectionConfig = {
 //     host: 'localhost',
 //     user: 'root',
-//     password: 'Shiva@2000', //'saiKrishnaNBAD',
-//     database: '', //'saiKrishnaNBAD'
+//     password: 'Shravani$123', //'ShravaniNBAD',
+//     database: '', //'Shravani'
 // };
 
 const mysql = require("mysql2");
@@ -37,7 +37,7 @@ dbConnection.connect((err) => {
 });
 
 
-const jwtKey = 'SaiKrishna';
+const jwtKey = 'Shravani';
 
 const jwtValidationMiddleware = jwtAuth({
     secret: jwtKey,
