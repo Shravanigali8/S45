@@ -12,7 +12,7 @@ app.use(corsLib());
 // const dbConnectionConfig = {
 //     host: 'localhost',
 //     user: 'root',
-//     password: 'Shravani$123', //'ShravaniNBAD',
+//     password: 'Shiva@2000', //'ShravaniNBAD',
 //     database: '', //'Shravani'
 // };
 
