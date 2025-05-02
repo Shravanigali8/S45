@@ -1,0 +1,9 @@
+<nav>
+    <ul>
+        <li><a [routerLink]="['/']">Home</a></li>
+        <li><a [routerLink]="['/dashboard']">Dashboard</a></li>
+        <li><a [routerLink]="['/summary']">Summary</a></li>
+        <li><a [routerLink]="['/reports']">Reports</a></li>
+        <li><a *ngIf="isLoggedIn()" class="logout" (click)="logout()">Logout</a></li>
+    </ul>
+</nav>

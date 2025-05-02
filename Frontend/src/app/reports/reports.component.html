@@ -1,0 +1,29 @@
+<div class="container">
+  <h1>Clean Energy Technology Reports</h1>
+  
+  <div class="chart-container">
+    <canvas id="reportsChart"></canvas>
+  </div>
+  
+  <div class="description">
+    <h3>Technology Readiness Analysis</h3>
+    <p>
+      This chart presents a comparative analysis of technological maturity across various methods
+      of repurposing coal and gas plants into clean energy hubs. Technologies tracked include
+      solar PV integration, battery storage, clean hydrogen production, small modular nuclear reactors,
+      and carbon capture. The readiness levels reflect the global adoption and development stage of
+      each technology, based on nearly 170 repowering projects tracked worldwide.
+    </p>
+    <p>Data source: Carnegie Endowment – Carbon to Clean Tracker</p>
+  </div>
+  
+  <div class="tech-stack">
+    <h3>Technical Implementation</h3>
+    <p>
+      The Reports page visualizes clean energy repowering technologies using a line chart 
+      powered by Chart.js. Data is retrieved asynchronously from our Express backend API,
+      which is protected using JWT-based authentication. The Angular component manages 
+      data flow and rendering, ensuring responsive behavior across all screen sizes.
+    </p>
+  </div>
+</div>

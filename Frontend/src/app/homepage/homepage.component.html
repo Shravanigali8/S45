@@ -1,0 +1,126 @@
+<div class="container py-5" *ngIf="!isLoggedIn()">
+  <div class="row justify-content-center">
+    <!-- Column for Registration Form -->
+    <div class="col-lg-5 col-md-6 mb-4">
+      <!-- Card Container for Registration Form -->
+      <div class="card shadow-lg border-light mb-4">
+        <div class="card-header bg-primary text-white text-center">
+          <h4>Create New Account</h4>
+        </div>
+        <div class="card-body">
+          <form (submit)="onSubmit($event)">
+            <!-- Username Field -->
+            <div class="form-group mb-3">
+              <label for="user" class="form-label">Username</label>
+              <input
+                type="text"
+                id="user"
+                class="form-control"
+                placeholder="Enter your username"
+                [(ngModel)]="user"
+                name="user"
+              />
+              <small class="text-danger" *ngIf="registrationErrors.user">{{ registrationErrors.user }}</small>
+            </div>
+
+            <!-- Password Field -->
+            <div class="form-group mb-3">
+              <label for="password" class="form-label">Password</label>
+              <input
+                type="password"
+                id="password"
+                class="form-control"
+                placeholder="Enter your password"
+                [(ngModel)]="pass"
+                name="password"
+              />
+              <small class="text-danger" *ngIf="registrationErrors.pass">{{ registrationErrors.pass }}</small>
+            </div>
+
+            <!-- Confirm Password Field -->
+            <div class="form-group mb-3">
+              <label for="confirmPassword" class="form-label">Confirm Password</label>
+              <input
+                type="password"
+                id="confirmPassword"
+                class="form-control"
+                placeholder="Confirm your password"
+                [(ngModel)]="confirmPass"
+                name="confirmPass"
+              />
+              <small class="text-danger" *ngIf="registrationErrors.confirmPass">{{ registrationErrors.confirmPass }}</small>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="form-group text-center">
+              <button type="submit" class="btn btn-success btn-lg px-5">Sign Up</button>
+            </div>
+          </form>
+        </div>
+        <div class="card-footer text-center">
+          <p 
+          [class.text-danger]="registrationErrors.server" 
+          [class.text-success]="!registrationErrors.server">
+          {{ registrationErrors.server ? registrationErrors.server + registrationResponseMessage : registrationResponseMessage }}
+        </p>
+                </div>
+      </div>
+    </div>
+
+    <!-- Column for Login Form -->
+    <div class="col-lg-5 col-md-6 mb-4">
+      <!-- Card Container for Login Form -->
+      <div class="card shadow-lg border-light">
+        <div class="card-header bg-info text-white text-center">
+          <h4>Login</h4>
+        </div>
+        <div class="card-body">
+          <form (submit)="handleLogin($event)">
+            <!-- Username Field -->
+            <div class="form-group mb-3">
+              <label for="loginUser" class="form-label">Username</label>
+              <input
+                type="text"
+                id="loginUser"
+                class="form-control"
+                placeholder="Enter your username"
+                [(ngModel)]="loginUser"
+                name="loginUser"
+              />
+              <small class="text-danger" *ngIf="loginErrors.username">{{ loginErrors.username }}</small>
+            </div>
+
+            <!-- Password Field -->
+            <div class="form-group mb-3">
+              <label for="loginPass" class="form-label">Password</label>
+              <input
+                type="password"
+                id="loginPass"
+                class="form-control"
+                placeholder="Enter your password"
+                [(ngModel)]="loginPass"
+                name="loginPass"
+              />
+              <small class="text-danger" *ngIf="loginErrors.password">{{ loginErrors.password }}</small>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="form-group text-center">
+              <button type="submit" class="btn btn-primary btn-lg px-5">Login</button>
+            </div>
+          </form>
+        </div>
+        <div class="card-footer text-center">
+          <p [class.text-danger]="loginErrors.server" [class.text-success]="!loginErrors.server">{{ loginResponseMessage }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div *ngIf="isLoggedIn()" class="text-center mt-5">
+  <div class="alert alert-success" role="alert">
+    <h4 class="alert-heading">You are already logged in!</h4>
+    <p>Explore other pages through the navigation menu.</p>
+  </div>
+</div>
