@@ -1,3 +1,5 @@
+require('dotenv').config(); // Load environment variables at top
+
 const express = require('express');
 const mysql = require('mysql2/promise');
 const crypto = require('crypto');
@@ -6,22 +8,23 @@ const jwt = require('jsonwebtoken');
 const { expressjwt: jwtAuth } = require('express-jwt');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
 
-const app = express();
 const serverPort = process.env.PORT || 3000;
+const jwtKey = process.env.JWT_SECRET || 'Shravani';
+const app = express();
 
-// Security middleware
+// Security and middleware
 app.use(helmet());
+app.use(express.json());
 
-// Rate limiting
+// Rate Limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100
 });
 app.use(limiter);
 
-// CORS Configuration
+// CORS Setup
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
@@ -39,12 +42,11 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
+
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable preflight requests
 
-app.use(express.json());
-
-// MySQL Connection
+// Database connection
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
@@ -54,53 +56,35 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false }
 });
 
-// JWT Setup
-const jwtKey = process.env.JWT_SECRET;
+// JWT middleware
 const jwtValidationMiddleware = jwtAuth({
   secret: jwtKey,
   algorithms: ['HS256'],
   credentialsRequired: true
 });
 
-// Helper functions
+// Utils
 function generateSalt() {
   return crypto.randomBytes(32).toString('hex');
 }
+
 function encryptPassword(password, salt) {
   return crypto.createHash('sha256').update(password + salt).digest('hex');
 }
 
-// Health Check
+// Health check
 app.get('/', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString()
-  });
+  res.json({ status: 'healthy', time: new Date().toISOString() });
 });
 
-// Test DB connection
-app.get('/test-db', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT 1 + 1 AS result');
-    res.json({ success: true, result: rows[0].result });
-  } catch (err) {
-    console.error('DB test error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// User Registration
+// Registration
 app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ success: false, message: 'Username and password are required' });
-    }
+    if (!username || !password) return res.status(400).json({ success: false, message: 'Username and password required' });
 
     const salt = generateSalt();
     const hashedPassword = encryptPassword(password, salt);
@@ -112,52 +96,30 @@ app.post('/api/register', async (req, res) => {
 
     res.status(201).json({ success: true, userId: results.insertId });
   } catch (error) {
-    console.error('Registration error:', error);
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ success: false, message: 'Username already exists' });
     }
+    console.error('Registration error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
-// User Login
+// Login
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ success: false, message: 'Username and password are required' });
-    }
+    if (!username || !password) return res.status(400).json({ success: false, message: 'Username and password required' });
 
-    const [users] = await pool.execute(
-      'SELECT * FROM users WHERE username = ?', 
-      [username]
-    );
-
-    if (users.length === 0) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
+    const [users] = await pool.execute('SELECT * FROM users WHERE username = ?', [username]);
+    if (users.length === 0) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
     const user = users[0];
     const hashedPassword = encryptPassword(password, user.salt);
+    if (hashedPassword !== user.password) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    if (hashedPassword !== user.password) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
+    const token = jwt.sign({ userId: user.id, username: user.username }, jwtKey, { expiresIn: '1h' });
 
-    const token = jwt.sign(
-      { userId: user.id, username: user.username },
-      jwtKey,
-      { expiresIn: '1h' }
-    );
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        username: user.username
-      }
-    });
+    res.json({ success: true, token, user: { id: user.id, username: user.username } });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -167,29 +129,26 @@ app.post('/api/login', async (req, res) => {
 // Protected Chart APIs
 app.get('/api/summary-chart', jwtValidationMiddleware, async (req, res) => {
   try {
-    const data = {
+    res.json({
       title: "Clean Energy Investment Growth",
       data: {
         labels: ["Solar", "Wind", "Batteries", "Hydrogen", "CCUS"],
         datasets: [{
           label: "Investment (USD Billion)",
           data: [45, 38, 28, 15, 8],
-          backgroundColor: [
-            "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"
-          ]
+          backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"]
         }]
       }
-    };
-    res.json(data);
+    });
   } catch (error) {
-    console.error('Summary chart error:', error);
+    console.error('Chart error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 app.get('/api/reports-chart', jwtValidationMiddleware, async (req, res) => {
   try {
-    const data = {
+    res.json({
       title: "Technology Readiness Levels",
       data: {
         labels: ["Perovskite PV", "Solid-State Batteries", "Green Hydrogen", "Floating Wind", "Direct Air Capture"],
@@ -200,34 +159,33 @@ app.get('/api/reports-chart', jwtValidationMiddleware, async (req, res) => {
           fill: false
         }]
       }
-    };
-    res.json(data);
+    });
   } catch (error) {
-    console.error('Reports chart error:', error);
+    console.error('Chart error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Error Middleware
+// Error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Global error:', err.stack || err);
   if (err.name === 'UnauthorizedError') {
     return res.status(401).json({ success: false, message: 'Invalid or expired token' });
   }
   res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
-// Start Server
+// Start server
 const server = app.listen(serverPort, () => {
-  console.log(`Server running on port ${serverPort}`);
+  console.log(`✅ Server running on port ${serverPort}`);
 });
 
-// Graceful Shutdown
+// Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
+  console.log('SIGTERM received. Shutting down...');
   server.close(() => {
     pool.end();
-    console.log('Server and DB closed.');
+    console.log('✅ Server and DB connections closed');
     process.exit(0);
   });
 });
