@@ -8,8 +8,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
-const serverPort = process.env.PORT || 3000;
 const app = express();
+const serverPort = process.env.PORT || 3000;
 
 // Security middleware
 app.use(helmet());
@@ -21,32 +21,30 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// ✅ FIXED: CORS Setup
-const allowedOrigins = [
-  'https://s45-live.onrender.com',
-  'http://localhost:51467',
-  'http://localhost:4200'
-];
-
-app.use(cors({
+// CORS Configuration
+const corsOptions = {
   origin: function (origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:4200',
+      'http://localhost:51467',
+      'https://s45-live.onrender.com'
+    ];
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.error('Blocked by CORS: ', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}));
-app.options('*', cors());
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
-// Express body parser
 app.use(express.json());
 
-// MySQL Connection Pool
+// MySQL Connection
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
@@ -62,7 +60,7 @@ const pool = mysql.createPool({
 });
 
 // JWT Setup
-const jwtKey = process.env.JWT_SECRET || 'Shravani';
+const jwtKey = process.env.JWT_SECRET;
 const jwtValidationMiddleware = jwtAuth({
   secret: jwtKey,
   algorithms: ['HS256'],
@@ -73,24 +71,33 @@ const jwtValidationMiddleware = jwtAuth({
 function generateSalt() {
   return crypto.randomBytes(32).toString('hex');
 }
-
 function encryptPassword(password, salt) {
   return crypto.createHash('sha256').update(password + salt).digest('hex');
 }
 
-// ✅ Health Check
+// Health Check
 app.get('/', (req, res) => {
-  res.status(200).json({ 
+  res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString()
   });
 });
 
-// ✅ Register Endpoint
+// Test DB connection
+app.get('/test-db', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT 1 + 1 AS result');
+    res.json({ success: true, result: rows[0].result });
+  } catch (err) {
+    console.error('DB test error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// User Registration
 app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
     if (!username || !password) {
       return res.status(400).json({ success: false, message: 'Username and password are required' });
     }
@@ -104,7 +111,6 @@ app.post('/api/register', async (req, res) => {
     );
 
     res.status(201).json({ success: true, userId: results.insertId });
-
   } catch (error) {
     console.error('Registration error:', error);
     if (error.code === 'ER_DUP_ENTRY') {
@@ -114,16 +120,19 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// ✅ Login Endpoint
+// User Login
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-
     if (!username || !password) {
       return res.status(400).json({ success: false, message: 'Username and password are required' });
     }
 
-    const [users] = await pool.execute('SELECT * FROM users WHERE username = ?', [username]);
+    const [users] = await pool.execute(
+      'SELECT * FROM users WHERE username = ?', 
+      [username]
+    );
+
     if (users.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
@@ -144,16 +153,18 @@ app.post('/api/login', async (req, res) => {
     res.json({
       success: true,
       token,
-      user: { id: user.id, username: user.username }
+      user: {
+        id: user.id,
+        username: user.username
+      }
     });
-
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
-// ✅ Summary Chart (JWT protected)
+// Protected Chart APIs
 app.get('/api/summary-chart', jwtValidationMiddleware, async (req, res) => {
   try {
     const data = {
@@ -163,7 +174,9 @@ app.get('/api/summary-chart', jwtValidationMiddleware, async (req, res) => {
         datasets: [{
           label: "Investment (USD Billion)",
           data: [45, 38, 28, 15, 8],
-          backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"]
+          backgroundColor: [
+            "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"
+          ]
         }]
       }
     };
@@ -174,7 +187,6 @@ app.get('/api/summary-chart', jwtValidationMiddleware, async (req, res) => {
   }
 });
 
-// ✅ Reports Chart (JWT protected)
 app.get('/api/reports-chart', jwtValidationMiddleware, async (req, res) => {
   try {
     const data = {
@@ -196,28 +208,26 @@ app.get('/api/reports-chart', jwtValidationMiddleware, async (req, res) => {
   }
 });
 
-// ✅ Error Handling Middleware
+// Error Middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-
   if (err.name === 'UnauthorizedError') {
     return res.status(401).json({ success: false, message: 'Invalid or expired token' });
   }
-
   res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
-// ✅ Start Server
+// Start Server
 const server = app.listen(serverPort, () => {
   console.log(`Server running on port ${serverPort}`);
 });
 
-// ✅ Graceful Shutdown
+// Graceful Shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down...');
+  console.log('SIGTERM received. Shutting down gracefully...');
   server.close(() => {
     pool.end();
-    console.log('Server and DB connections closed.');
+    console.log('Server and DB closed.');
     process.exit(0);
   });
 });
