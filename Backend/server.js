@@ -1,101 +1,184 @@
-const expressApp = require('express');
-const mysqlDb = require('mysql');
-const cryptoUtils = require('crypto');
-const corsLib = require('cors');
-const jwtLib = require('jsonwebtoken');
-const { expressjwt: jwtAuth } = require('express-jwt');
+const express = require('express');
+const mysql = require('mysql2/promise'); // Using promise-based API
+const crypto = require('crypto');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const { expressjwt: jwtAuth } = require('express-jwt');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
+
 const serverPort = process.env.PORT || 3000;
-const app = expressApp();
-app.use(corsLib());
+const app = express();
 
-const mysql = require("mysql2");
-require("dotenv").config();
+// Security middleware
+app.use(helmet());
 
-// Configure CORS for credentials
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per window
+});
+app.use(limiter);
+
+// CORS Configuration
 const corsOptions = {
-    origin: ['http://localhost:4200','https://s45-live.onrender.com'], // Your frontend origin
-    credentials: true, // Required for cookies/sessions
-    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-  };
-  
-  app.use(cors(corsOptions));
-  
-  // Handle preflight requests
-  app.options('*', cors(corsOptions));
+  origin: [
+    'https://s45-live.onrender.com',
+    process.env.NODE_ENV === 'development' && 'http://localhost:3000'
+  ].filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
-const dbConnection = mysql.createConnection({
+// Database connection pool
+const pool = mysql.createPool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
   ssl: {
-    rejectUnauthorized: false  // For secure connection to Railway
+    rejectUnauthorized: false
   }
 });
 
-dbConnection.connect((err) => {
-  if (err) {
-    console.error("Database connection failed:", err);
-  } else {
-    console.log("Connected to MySQL database");
-  }
-});
-
-
-const jwtKey = 'Shravani';
-
+// JWT Configuration
+const jwtKey = process.env.JWT_SECRET || 'Shravani';
 const jwtValidationMiddleware = jwtAuth({
-    secret: jwtKey,
-    algorithms: ['HS256']
+  secret: jwtKey,
+  algorithms: ['HS256'],
+  credentialsRequired: true
 });
 
-app.use(expressApp.json());
+app.use(express.json());
 
-// Root API Endpoint
-app.get('/', async (req, res) => {
-    res.status(200).json({ success: true, message: 'API is running.' });
-});
-
-// Generate a cryptographic salt
+// Helper functions
 function generateSalt() {
-    return cryptoUtils.randomBytes(32).toString('hex');
+  return crypto.randomBytes(32).toString('hex');
 }
 
-// Hash and salt the password
 function encryptPassword(password, salt) {
-    const sha256Encryptor = cryptoUtils.createHash('sha256');
-    sha256Encryptor.update(password + salt);
-    return sha256Encryptor.digest('hex');
+  return crypto.createHash('sha256').update(password + salt).digest('hex');
 }
 
-// API for user signup
-app.post('/api/register', async (req, res) => {
-    const { password, username } = req.body;
-    const userSalt = generateSalt();
-    const encryptedPassword = encryptPassword(password, userSalt);
-
-    dbConnection.query(
-        'INSERT INTO users (password, salt, username) VALUES (?, ?, ?)',
-        [encryptedPassword, userSalt, username],
-        (dbError, dbResults) => {
-            if (dbError) {
-                console.error(dbError);
-                res.status(500).json({ success: false, error: dbError.sqlMessage });
-            } else {
-                res.json({ status: 200, success: true, response: dbResults });
-            }
-        }
-    );
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString()
+  });
 });
 
-// Summary chart data
-app.get('/api/summary-chart', (req, res) => {
+// User Registration
+app.post('/api/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Username and password are required' 
+      });
+    }
+
+    const salt = generateSalt();
+    const hashedPassword = encryptPassword(password, salt);
+
+    const [results] = await pool.execute(
+      'INSERT INTO users (username, password, salt) VALUES (?, ?, ?)',
+      [username, hashedPassword, salt]
+    );
+
+    res.status(201).json({ 
+      success: true, 
+      userId: results.insertId 
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Username already exists' 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+// User Login
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Username and password are required' 
+      });
+    }
+
+    const [users] = await pool.execute(
+      'SELECT * FROM users WHERE username = ?', 
+      [username]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials' 
+      });
+    }
+
+    const user = users[0];
+    const hashedPassword = encryptPassword(password, user.salt);
+
+    if (hashedPassword !== user.password) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials' 
+      });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, username: user.username },
+      jwtKey,
+      { expiresIn: '1h' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+// Protected API endpoints
+app.get('/api/summary-chart', jwtValidationMiddleware, async (req, res) => {
+  try {
     const data = {
-      title: "Clean Energy Investment Growth (Last 6 Months)",
-      chartType: "bar",
+      title: "Clean Energy Investment Growth",
       data: {
         labels: ["Solar", "Wind", "Batteries", "Hydrogen", "CCUS"],
         datasets: [{
@@ -105,18 +188,19 @@ app.get('/api/summary-chart', (req, res) => {
             "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"
           ]
         }]
-      },
-      description: "Shows the distribution of global investments across key clean energy sectors over the past six months."
+      }
     };
-  
     res.json(data);
-  });
-  
-  // Reports chart data
-  app.get('/api/reports-chart', (req, res) => {
+  } catch (error) {
+    console.error('Summary chart error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/reports-chart', jwtValidationMiddleware, async (req, res) => {
+  try {
     const data = {
-      title: "Technology Readiness Levels (TRL) of Emerging Clean Energy",
-      chartType: "line",
+      title: "Technology Readiness Levels",
       data: {
         labels: ["Perovskite PV", "Solid-State Batteries", "Green Hydrogen", "Floating Wind", "Direct Air Capture"],
         datasets: [{
@@ -125,145 +209,45 @@ app.get('/api/summary-chart', (req, res) => {
           borderColor: "#3e95cd",
           fill: false
         }]
-      },
-      description: "Illustrates the current maturity levels of promising clean energy technologies on the standard Technology Readiness Level scale."
+      }
     };
-  
     res.json(data);
-  });
-
-// API for user login
-app.post('/api/login', async (req, res) => {
-    const { password, username } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ 
-            success: false, 
-            message: 'Username and password are required' 
-        });
-    }
-
-    dbConnection.query(
-        'SELECT * FROM users WHERE username = ?', 
-        [username], 
-        (dbError, dbResults) => {
-            if (dbError) {
-                console.error('Database error:', dbError);
-                return res.status(500).json({ 
-                    success: false, 
-                    message: 'Database error' 
-                });
-            }
-
-            if (dbResults.length === 0) {
-                return res.status(401).json({ 
-                    success: false, 
-                    message: 'User not found' 
-                });
-            }
-
-            const foundUser = dbResults[0];
-            const encryptedPassword = encryptPassword(password, foundUser.salt);
-
-            // Debug logging
-            console.log('Login attempt:', {
-                username,
-                inputPassword: password,
-                storedHash: foundUser.password,
-                computedHash: encryptedPassword,
-                saltUsed: foundUser.salt
-            });
-
-            if (encryptedPassword !== foundUser.password) {
-                return res.status(401).json({ 
-                    success: false, 
-                    message: 'Invalid credentials' 
-                });
-            }
-
-            const authToken = jwtLib.sign(
-                { username: foundUser.username, userId: foundUser.id },
-                jwtKey,
-                { expiresIn: '59m' }
-            );
-
-            res.json({
-                success: true,
-                message: 'Login successful',
-                user: {
-                    username: foundUser.username,
-                    userId: foundUser.id
-                },
-                token: authToken
-            });
-        }
-    );
+  } catch (error) {
+    console.error('Reports chart error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-// API for retrieving innovations by region
-app.get('/api/regionInnovations', jwtValidationMiddleware, (req, res) => {
-    const userId = req.auth.userId;  // Assuming you have user authentication
-
-    dbConnection.query(
-        'SELECT region, percentage_contribution FROM innovations_by_region', 
-        (error, results) => {
-            if (error) {
-                console.error(error);
-                res.status(500).json({ error: 'Failed to get Innovations By Region data' });
-            } else {
-                res.json(results);
-            }
-        }
-    );
-});
-
-// API for retrieving innovations by technology
-app.get('/api/technologyInnovations', jwtValidationMiddleware, (req, res) => {
-    const userId = req.auth.userId;  // Assuming you have user authentication
-
-    dbConnection.query(
-        'SELECT technology, number_of_innovations FROM innovations_by_technology', 
-        (error, results) => {
-            if (error) {
-                console.error(error);
-                res.status(500).json({ error: 'Failed to get Innovations By Technology data' });
-            } else {
-                res.json(results);
-            }
-        }
-    );
-});
-
-// Connect to the database
-dbConnection.connect((err) => {
-    if (err) {
-        console.error('Database connection failed:', err);
-        process.exit(1);
-    }
-    console.log('Successfully connected to the database.');
-});
-
-// Gracefully close the database connection
-const closeDbConnection = () => {
-    dbConnection.end((err) => {
-        if (err) {
-            console.error('Error closing the database connection:', err);
-        } else {
-            console.log('Database connection closed');
-        }
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  
+  if (err.name === 'UnauthorizedError') {
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Invalid or expired token' 
     });
-};
-
-// Start the server
-const server = app.listen(serverPort, () => {
-    console.log(`Server running on port ${serverPort}`);
+  }
+  
+  res.status(500).json({ 
+    success: false, 
+    message: 'Internal server error' 
+  });
 });
 
-// Handle server and database closure on process exit
-process.on('exit', () => {
-    server.close();
-    closeDbConnection();
-    console.log('Server and database connection closed.');
+// Server startup
+const server = app.listen(serverPort, () => {
+  console.log(`Server running on port ${serverPort}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Shutting down gracefully...');
+  server.close(() => {
+    pool.end();
+    console.log('Server and database connections closed');
+    process.exit(0);
+  });
 });
 
 module.exports = app;
