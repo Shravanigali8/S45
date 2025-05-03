@@ -4,7 +4,7 @@ const cryptoUtils = require('crypto');
 const corsLib = require('cors');
 const jwtLib = require('jsonwebtoken');
 const { expressjwt: jwtAuth } = require('express-jwt');
-
+const cors = require('cors');
 const serverPort = process.env.PORT || 3000;
 const app = expressApp();
 app.use(corsLib());
