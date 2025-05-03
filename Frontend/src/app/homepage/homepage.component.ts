@@ -66,7 +66,7 @@ export class HomepageComponent {
     event.preventDefault();
     if (this.validateRegistrationForm()) {
       try {
-        const serverResponse = await axios.post('http://localhost/api/register', {
+        const serverResponse = await axios.post('https://s45.onrender.com/api/register', {
           username: this.user,
           password: this.pass,
         });
@@ -97,7 +97,7 @@ export class HomepageComponent {
     event.preventDefault();
     if (this.validateLoginForm()) {
       try {
-        const response = await axios.post('http://localhost/api/login', {
+        const response = await axios.post('https://s45.onrender.com/api/login', {
           username: this.loginUser,
           password: this.loginPass
         });

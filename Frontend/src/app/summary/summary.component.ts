@@ -16,7 +16,7 @@ export class SummaryComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.http.get('http://localhost:3000/api/summary-chart').subscribe(
+    this.http.get('https://s45.onrender.com/api/summary-chart').subscribe(
       (data: any) => {
         this.createChart(data);
         this.chartDescription = data.description;

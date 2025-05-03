@@ -16,7 +16,7 @@ export class ReportsComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.http.get('http://localhost:3000/api/reports-chart').subscribe(
+    this.http.get('https://s45.onrender.com/api/reports-chart').subscribe(
       (data: any) => {
         this.createChart(data);
         this.chartDescription = data.description;
