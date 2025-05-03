@@ -17,15 +17,17 @@ app.use(corsLib());
 // };
 
 const mysql = require("mysql2");
-const dotenv = require("dotenv");
+require("dotenv").config();
 
-dotenv.config();
-console.log(process.env.DB_PASSWORD);
 const dbConnection = mysql.createConnection({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'Shiva@2000',
-  database: process.env.DB_NAME || 's45db',
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  ssl: {
+    rejectUnauthorized: false  // For secure connection to Railway
+  }
 });
 
 dbConnection.connect((err) => {
@@ -70,7 +72,7 @@ app.post('/api/register', async (req, res) => {
     const encryptedPassword = encryptPassword(password, userSalt);
 
     dbConnection.query(
-        'INSERT INTO user (password, salt, username) VALUES (?, ?, ?)',
+        'INSERT INTO users (password, salt, username) VALUES (?, ?, ?)',
         [encryptedPassword, userSalt, username],
         (dbError, dbResults) => {
             if (dbError) {
@@ -136,7 +138,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     dbConnection.query(
-        'SELECT * FROM user WHERE username = ?', 
+        'SELECT * FROM users WHERE username = ?', 
         [username], 
         (dbError, dbResults) => {
             if (dbError) {
