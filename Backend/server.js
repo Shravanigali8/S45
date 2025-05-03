@@ -127,7 +127,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Protected Chart APIs
-app.get('/api/summary-chart', jwtValidationMiddleware, async (req, res) => {
+app.get('/api/summary-chart', (req, res) => {
   try {
     res.json({
       title: "Clean Energy Investment Growth",
@@ -146,7 +146,7 @@ app.get('/api/summary-chart', jwtValidationMiddleware, async (req, res) => {
   }
 });
 
-app.get('/api/reports-chart', jwtValidationMiddleware, async (req, res) => {
+app.get('/api/reports-chart', (req, res) => {
   try {
     res.json({
       title: "Technology Readiness Levels",
