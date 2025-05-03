@@ -9,15 +9,21 @@ const serverPort = process.env.PORT || 3000;
 const app = expressApp();
 app.use(corsLib());
 
-// const dbConnectionConfig = {
-//     host: 'localhost',
-//     user: 'root',
-//     password: 'Shiva@2000', //'ShravaniNBAD',
-//     database: '', //'Shravani'
-// };
-
 const mysql = require("mysql2");
 require("dotenv").config();
+
+// Configure CORS for credentials
+const corsOptions = {
+    origin: ['http://localhost:4200','https://s45-live.onrender.com'], // Your frontend origin
+    credentials: true, // Required for cookies/sessions
+    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  };
+  
+  app.use(cors(corsOptions));
+  
+  // Handle preflight requests
+  app.options('*', cors(corsOptions));
 
 const dbConnection = mysql.createConnection({
   host: process.env.DB_HOST,
